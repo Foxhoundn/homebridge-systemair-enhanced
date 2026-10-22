@@ -1,0 +1,151 @@
+import { MODES, modeByCurrent, type IMode, type TModeId } from './modes.js';
+import { MANUAL_LEVEL, REGISTER, SETPOINT_RANGE, type TManualLevel } from './registers.js';
+
+/** Register values as the unit returns them: `{"1160": 3, …}`. */
+export type TRegisterValues = Readonly<Record<string, number>>;
+/** Registers to write: `{ 1161: 4 }`. */
+export type TRegisterWrite = Readonly<Record<number, number>>;
+
+/** Everything HomeKit shows, read in one request (register → how many registers). */
+export const POLL_REGISTERS: Readonly<Record<number, number>> = {
+  [REGISTER.modeCurrent]: 1,
+  [REGISTER.manualLevel]: 1,
+  [REGISTER.remaining]: 2,
+  [REGISTER.manualStopAllowed]: 1,
+  [REGISTER.supplyFanOutput]: 2,
+  [REGISTER.extractTemperature]: 1,
+  [REGISTER.outdoorTemperature]: 1,
+  [REGISTER.setpoint]: 1,
+  [REGISTER.humidity]: 1,
+  [REGISTER.eco]: 1,
+  [REGISTER.filterPeriod]: 1,
+  [REGISTER.filterRemaining]: 2,
+  ...Object.fromEntries(
+    MODES.flatMap((mode) => (mode.duration ? [[mode.duration.register, 1]] : []))
+  ),
+};
+
+export interface IVentilatorState {
+  /** The mode it's in; undefined for a value this plugin doesn't know. */
+  mode?: TModeId;
+  /** Time left in a timed mode, seconds (0 when none is running). */
+  remainingSeconds: number;
+  manualLevel: number;
+  manualStopAllowed: boolean;
+  /** What the fans run at now, percent. */
+  supplyFanPercent: number;
+  extractFanPercent: number;
+  /** °C */
+  extractTemperature: number;
+  outdoorTemperature: number;
+  setpoint: number;
+  /** Percent. */
+  humidity: number;
+  eco: boolean;
+  filterPeriodMonths: number;
+  filterRemainingSeconds: number;
+  /** Each timed mode's duration, in its own unit (Refresh 35 minutes, Away 8 hours). */
+  durations: Partial<Record<TModeId, number>>;
+}
+
+class MissingRegisterError extends Error {}
+
+/** One register's value; a reply without it isn't a reading. */
+function value(values: TRegisterValues, register: number): number {
+  const read = values[String(register)];
+  if (typeof read !== 'number' || !Number.isFinite(read))
+    throw new MissingRegisterError(`The unit didn't return register ${register}`);
+  return read;
+}
+/** A signed 16-bit register: an outdoor temperature can be below zero. */
+const signed = (raw: number): number => (raw > 32_767 ? raw - 65_536 : raw);
+/** Two registers, low then high, as one number. */
+const long = (values: TRegisterValues, register: number): number =>
+  value(values, register + 1) * 65_536 + value(values, register);
+const tenths = (raw: number): number => signed(raw) / 10;
+
+/** What the unit is doing, from one read of `POLL_REGISTERS`. */
+export function readState(values: TRegisterValues): IVentilatorState {
+  return {
+    mode: modeByCurrent(value(values, REGISTER.modeCurrent))?.id,
+    remainingSeconds: long(values, REGISTER.remaining),
+    manualLevel: value(values, REGISTER.manualLevel),
+    manualStopAllowed: value(values, REGISTER.manualStopAllowed) === 1,
+    supplyFanPercent: value(values, REGISTER.supplyFanOutput),
+    extractFanPercent: value(values, REGISTER.extractFanOutput),
+    extractTemperature: tenths(value(values, REGISTER.extractTemperature)),
+    outdoorTemperature: tenths(value(values, REGISTER.outdoorTemperature)),
+    setpoint: tenths(value(values, REGISTER.setpoint)),
+    humidity: value(values, REGISTER.humidity),
+    eco: value(values, REGISTER.eco) === 1,
+    filterPeriodMonths: value(values, REGISTER.filterPeriod),
+    filterRemainingSeconds: long(values, REGISTER.filterRemaining),
+    durations: Object.fromEntries(
+      MODES.flatMap((mode) =>
+        mode.duration ? [[mode.id, value(values, mode.duration.register)]] : []
+      )
+    ),
+  };
+}
+
+export function isMissingRegister(error: unknown): boolean {
+  return error instanceof MissingRegisterError;
+}
+
+/** The fans are stopped: Manual mode at Off. */
+export function isStopped(state: IVentilatorState): boolean {
+  return state.mode === 'manual' && state.manualLevel === MANUAL_LEVEL.off;
+}
+
+/** How much filter life is left, percent of its change period. */
+export function filterLifePercent(state: IVentilatorState): number {
+  const period = state.filterPeriodMonths * 30 * 86_400;
+  if (period <= 0) return 0;
+  return Math.round(Math.min(100, Math.max(0, (state.filterRemainingSeconds / period) * 100)));
+}
+
+/** The manual level a HomeKit fan speed stands for: up to a third Low, two thirds Normal, then High. */
+export function levelForSpeed(percent: number): TManualLevel {
+  if (percent <= 0) return MANUAL_LEVEL.off;
+  if (percent <= 33) return MANUAL_LEVEL.low;
+  if (percent <= 66) return MANUAL_LEVEL.normal;
+  return MANUAL_LEVEL.high;
+}
+
+/** Back to Auto: the unit's own schedule and demand control. */
+export const AUTO_WRITE: TRegisterWrite = { [REGISTER.modeRequest]: modeRequest('auto') };
+
+function modeRequest(id: TModeId): number {
+  const request = MODES.find((mode) => mode.id === id)?.request;
+  if (request === undefined) throw new Error(`${id} can't be switched on over the network`);
+  return request;
+}
+
+/** Manual mode at the level a fan speed stands for (0 stops the fans). */
+export function speedWrite(percent: number): TRegisterWrite {
+  return {
+    [REGISTER.manualLevel]: levelForSpeed(percent),
+    [REGISTER.modeRequest]: modeRequest('manual'),
+  };
+}
+
+/**
+ * Switches a mode on. Only the mode: the unit's web page sends its whole Home form when you
+ * change mode, and copying that (as this plugin once did) also reset the setpoint to 18 °C.
+ */
+export function modeWrite(mode: IMode): TRegisterWrite {
+  return { [REGISTER.modeRequest]: modeRequest(mode.id) };
+}
+
+/** A timed mode's duration, in its own unit (whole minutes, hours or days). */
+export function durationWrite(mode: IMode, value: number): TRegisterWrite {
+  if (!mode.duration) throw new Error(`${mode.name} has no duration`);
+  const clamped = Math.min(mode.duration.max, Math.max(mode.duration.min, Math.round(value)));
+  return { [mode.duration.register]: clamped };
+}
+
+/** The setpoint, in tenths of a degree, within the unit's range. */
+export function setpointWrite(celsius: number): TRegisterWrite {
+  const clamped = Math.min(SETPOINT_RANGE.max, Math.max(SETPOINT_RANGE.min, celsius));
+  return { [REGISTER.setpoint]: Math.round(clamped * 10) };
+}

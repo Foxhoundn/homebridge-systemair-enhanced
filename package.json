@@ -1,10 +1,23 @@
 {
   "name": "@lv426/homebridge-systemair-enhanced",
-  "version": "1.0.1",
-  "description": "An enhanced Homebridge plugin for controlling SystemAir Ventilators, which includes Temperature controls and Humidity readings",
-  "main": "index.js",
+  "displayName": "Systemair Ventilator",
+  "version": "2.0.0",
+  "description": "Systemair SAVE ventilation in HomeKit through SAVE Connect: modes for scenes (Refresh, Fireplace, Crowded, Away, Holiday) with their durations, the fan's real speed, temperature, humidity and the filter.",
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "files": [
+    "dist",
+    "config.schema.json",
+    "icon.png",
+    "README.md"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run check && npm run build"
   },
   "author": "foxhoundn",
   "license": "MIT",
@@ -16,16 +29,15 @@
     "homebridge-plugin",
     "homebridge",
     "systemair",
+    "save-connect",
+    "ventilation",
     "ventilator",
     "fan",
     "thermostat"
   ],
   "engines": {
-    "node": ">=12.0.0",
-    "homebridge": ">=2.0.0"
-  },
-  "dependencies": {
-    "axios": "^1.4.0"
+    "node": "^20.18.0 || ^22.10.0 || ^24.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -34,5 +46,12 @@
     "pluginAlias": "SystemairVentilatorEnhanced",
     "pluginType": "accessory",
     "icon": "https://raw.githubusercontent.com/foxhoundn/homebridge-systemair-ventilator/master/icon.png"
+  },
+  "devDependencies": {
+    "@homebridge/hap-nodejs": "2.2.2",
+    "@types/node": "^26.6.5",
+    "homebridge": "^2.4.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
   }
 }

@@ -1,94 +1,68 @@
-# Homebridge Systemair Ventilator Plugin
+# Homebridge Systemair Ventilator
 
-This is a Homebridge plugin for controlling a Systemair Ventilator through its web interface then into HomeKit. You must have a SAVEConnect WIFI module connected for this to work. You will need the IP address of the SAVEConnect device and include it in the plugin settings.
+Your Systemair SAVE ventilation in HomeKit, through its SAVE Connect module (the one whose web page you open at the unit's address).
 
-This plugin provides comprehensive control of your Systemair ventilator including:
+- **The fan** at the speed it really runs at. Set a speed to run it manually at Low, Normal or High, switch it back to Auto, or turn it off (where the unit allows it).
+- **A switch per mode** for scenes and automations: Auto, Crowded, Refresh, Fireplace, Away and Holiday. Only one is on at a time; turning the one that's on off goes back to Auto.
+- **Timers for Refresh and Fireplace.** The Home app's Duration sets how long the mode lasts, and the tile counts down while it runs.
+- **Temperature** (what the house is at, and the setpoint), **humidity**, the **outdoor temperature** and the **filter** (how long until it's due).
 
-- **Fan Speed Control**: Adjust ventilation speeds with multiple settings
-- **Temperature Control**: Set target temperature and view current temperature
-- **Humidity Monitoring**: Monitor current humidity levels
-- **Thermostat Interface**: Control heating/cooling/auto modes through HomeKit's thermostat interface
+The unit is read in one request every 10 seconds, and HomeKit is told about each change, so the Home app opens without waiting.
 
-# Installation:
+## Install
 
-If Homebridge is not already installed, use the following command to install it globally:
+In Homebridge's web interface, search for **Systemair Ventilator** under Plugins and install it, or:
 
-1. Install Homebridge:
+```bash
+npm install -g @lv426/homebridge-systemair-enhanced
+```
 
-   ```bash
-   npm install -g homebridge
+## Settings
 
-   ```
+Fill them in under the plugin's **Settings** in Homebridge's web interface, or add this to `config.json`:
 
-2. Install the Plugin
+```json
+{
+  "accessories": [
+    {
+      "accessory": "SystemairVentilatorEnhanced",
+      "name": "Ventilation",
+      "ip": "192.168.68.57"
+    }
+  ]
+}
+```
 
-   ```bash
-   npm install -g @lv426/homebridge-systemair-enhanced
-   Run the following command to install the Homebridge Systemair Ventilator plugin:
+| Setting | What it does | Default |
+| --- | --- | --- |
+| `name` | Each tile is named after it ("Ventilation Fan"). | `Ventilation` |
+| `ip` | The SAVE Connect module's address. | — |
+| `modeSwitches` | Modes shown as switches: `auto`, `crowded`, `refresh`, `fireplace`, `away`, `holiday`. | all six |
+| `timers` | Modes with a timer tile: `refresh`, `fireplace`. | both |
+| `modeNames` | Your own names, for example `{ "crowded": "Visitors" }`. | the unit's |
+| `outdoorTemperature` | Show the outdoor temperature. | `true` |
+| `filter` | Show the filter. | `true` |
+| `pollSeconds` | How often the unit is read (at least 5). | `10` |
 
-   ```
+Cooker hood and Vacuum cleaner modes are started by switches wired to the unit, so HomeKit can't start them.
 
-3. Configure the Plugin
-   Edit the Homebridge config.json file to include the plugin. Add the following under "accessories":
+## Upgrading from 1.x
 
-   ```yaml
-   {
-     "accessories": [
-       {
-         "accessory": "SystemairVentilatorEnhanced",
-         "name": "Living Room Ventilator",
-         "ip": "x.x.x.x"
-       }
-     ]
-   }
-   Replace add your Systemair IP with the actual IP address of your Systemair SAVEConnect device.
+The tiles you had (fan, Refresh switch, thermostat, humidity and timer) stay as they were, so scenes and automations that use them keep working. New tiles appear next to them.
 
-   ```
+Two things changed:
 
-4. Restart Homebridge
-   Restart Homebridge for the changes to take effect:
-   ```bash
-   sudo systemctl restart homebridge
-   ```
+- **Refresh only switches Refresh on.** 1.x also set the temperature to 18 °C, the manual speed to Low and ECO off, because it sent the unit's whole Home form.
+- **The fan shows the speed it really runs at.** In Refresh it used to show 16% (the manual Low setting) while the unit ran at maximum.
 
-# Features:
+## How it talks to the unit
 
-Control fan speeds with three settings: Low, Medium, and High.
-Adjust the target temperature directly from HomeKit.
-View current temperature and humidity readings.
-Control heating/cooling/auto modes through the thermostat interface.
-Automatically handles fan activation and speed synchronization.
-Create scenes for Low, Normal, and High with the following mappings:
+The same way the unit's own web page does: `GET /mread?{"1160":1}` reads registers and `GET /mwrite?{"1161":4}` writes them. The registers are listed in [`src/registers.ts`](src/registers.ts) and [`src/modes.ts`](src/modes.ts).
 
-speed === 1 maps to 0% (Off)
-speed === 2 maps to 16% (Low)
-speed === 3 maps to 50% (Normal)
-speed === 4 maps to 83% (High)
+## Development
 
-# Troubleshooting:
-
-If the ventilator doesn't respond, check the following:
-
-Ensure the IP address in the configuration is correct.
-Verify that the SAVEConnect WIFI module is online.
-Check Homebridge logs for error messages.
-
-**Note**: The plugin creates multiple HomeKit accessories:
-
-- **Fan**: Controls ventilation speed and on/off state
-- **Thermostat**: Controls target temperature and heating/cooling modes
-- **Humidity Sensor**: Displays current humidity levels
-- **Refresh Switch**: Triggers refresh mode
-- **Timer Display**: Shows remaining timer (displayed as battery level)
-
-## Parameter IDs:
-
-The plugin uses the following Systemair SAVEConnect parameter IDs:
-
-- **1130**: Fan speed control (0=off, 2=low, 3=medium, 4=high)
-- **1110**: Timer remaining time
-- **1120**: Current temperature sensor reading
-- **2000**: Target temperature setting
-- **1125**: Current humidity sensor reading
-
-**Important**: These parameter IDs are based on common Systemair configurations but may vary by device model. If temperature or humidity readings are not working correctly, you may need to modify the parameter IDs in the code to match your specific device's API configuration.
+```bash
+npm install
+npm run check   # typecheck and tests
+npm run build
+```

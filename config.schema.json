@@ -1,0 +1,93 @@
+{
+  "pluginAlias": "SystemairVentilatorEnhanced",
+  "pluginType": "accessory",
+  "singular": false,
+  "headerDisplay": "Systemair SAVE ventilation through its SAVE Connect module: the fan, a switch per mode for scenes, timers for Refresh and Fireplace, temperature, humidity and the filter.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Ventilation",
+        "required": true,
+        "description": "Each tile is named after it: \"Ventilation Fan\", \"Ventilation Refresh\"…"
+      },
+      "ip": {
+        "title": "SAVE Connect address",
+        "type": "string",
+        "required": true,
+        "placeholder": "192.168.68.57",
+        "description": "The address you open the unit's web page at."
+      },
+      "pollSeconds": {
+        "title": "Read the unit every (seconds)",
+        "type": "integer",
+        "default": 10,
+        "minimum": 5
+      },
+      "modeSwitches": {
+        "title": "Modes to show as switches",
+        "description": "For scenes and automations. Only one is on at a time; turning the one that's on off goes back to Auto.",
+        "type": "array",
+        "uniqueItems": true,
+        "default": ["auto", "crowded", "refresh", "fireplace", "away", "holiday"],
+        "items": {
+          "type": "string",
+          "enum": ["auto", "crowded", "refresh", "fireplace", "away", "holiday"],
+          "enumNames": ["Auto", "Crowded", "Refresh", "Fireplace", "Away", "Holiday"]
+        }
+      },
+      "timers": {
+        "title": "Modes with a timer",
+        "description": "A timer tile sets how long the mode lasts (the Home app's Duration, up to an hour) and counts down while it runs.",
+        "type": "array",
+        "uniqueItems": true,
+        "default": ["refresh", "fireplace"],
+        "items": {
+          "type": "string",
+          "enum": ["refresh", "fireplace"],
+          "enumNames": ["Refresh", "Fireplace"]
+        }
+      },
+      "modeNames": {
+        "title": "Your own names for the modes",
+        "type": "object",
+        "properties": {
+          "auto": { "title": "Auto", "type": "string", "placeholder": "Auto" },
+          "crowded": { "title": "Crowded", "type": "string", "placeholder": "Crowded (for example, Visitors)" },
+          "refresh": { "title": "Refresh", "type": "string", "placeholder": "Refresh" },
+          "fireplace": { "title": "Fireplace", "type": "string", "placeholder": "Fireplace" },
+          "away": { "title": "Away", "type": "string", "placeholder": "Away" },
+          "holiday": { "title": "Holiday", "type": "string", "placeholder": "Holiday" }
+        }
+      },
+      "outdoorTemperature": {
+        "title": "Show the outdoor temperature",
+        "type": "boolean",
+        "default": true
+      },
+      "filter": {
+        "title": "Show the filter (time to change it)",
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "ip",
+    {
+      "type": "fieldset",
+      "title": "Modes",
+      "expandable": true,
+      "items": ["modeSwitches", "timers", "modeNames"]
+    },
+    {
+      "type": "fieldset",
+      "title": "More",
+      "expandable": true,
+      "items": ["outdoorTemperature", "filter", "pollSeconds"]
+    }
+  ]
+}
