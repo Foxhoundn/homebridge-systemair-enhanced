@@ -8,7 +8,9 @@ import type {
   Service,
   WithUUID,
 } from 'homebridge';
+import path from 'node:path';
 import { readConfig, TIMER_MAX_SECONDS, type IVentilatorConfig } from './config.js';
+import { TileNames } from './names.js';
 import {
   durationSeconds,
   durationValue,
@@ -48,6 +50,8 @@ export interface IVentilatorClient {
 
 export interface IVentilatorOptions {
   client?: IVentilatorClient;
+  /** Where the tiles' Home app names are kept (by default, in Homebridge's storage). */
+  namesFile?: string;
   /** Start reading the unit on a timer (off in tests, which call `poll` themselves). */
   autoPoll?: boolean;
 }
@@ -74,6 +78,7 @@ export class SystemairVentilator implements AccessoryPlugin {
   private readonly client: IVentilatorClient;
   private readonly services: Service[] = [];
   private readonly readers: Array<{ service: Service; type: TCharacteristic; read: TReader }> = [];
+  private readonly names: TileNames;
   private state?: IVentilatorState;
   /** The mode a timed one interrupted, to go back to when it's turned off. */
   private steady: ISteadyMode = { mode: 'auto', manualLevel: fanLevel('low').value };
@@ -90,6 +95,7 @@ export class SystemairVentilator implements AccessoryPlugin {
   ) {
     this.config = readConfig(rawConfig);
     this.client = options.client ?? new SaveConnect({ host: this.config.ip });
+    this.names = new TileNames(this.config.name, options.namesFile ?? namesFileIn(api));
     this.build();
     if (options.autoPoll !== false) {
       void this.poll();
@@ -173,6 +179,22 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.readBack = setTimeout(() => void this.poll(), READ_BACK_MS);
   }
 
+  /**
+   * Adds a tile, named in the Home app: since iOS 16 the Home app shows a tile's own name only
+   * from its ConfiguredName, and every other tile as the accessory ("Ventilation"). A name you
+   * give it there is kept.
+   */
+  private add(service: Service): void {
+    const { Characteristic: C } = this.hap;
+    const tile = `${service.UUID}:${service.subtype ?? ''}`;
+    if (!service.testCharacteristic(C.ConfiguredName)) service.addCharacteristic(C.ConfiguredName);
+    service
+      .getCharacteristic(C.ConfiguredName)
+      .updateValue(this.names.get(tile) ?? service.displayName)
+      .onSet((value) => this.names.set(tile, String(value)));
+    this.services.push(service);
+  }
+
   /** Shows a change at once, before the unit is read back. */
   private assume(change: Partial<IVentilatorState>): void {
     if (!this.state) return;
@@ -215,18 +237,18 @@ export class SystemairVentilator implements AccessoryPlugin {
         await this.send(ecoWrite(on), on ? 'ECO mode on' : 'ECO mode off');
         this.assume({ eco: on });
       });
-      this.services.push(eco);
+      this.add(eco);
     }
 
     const humidity = new S.HumiditySensor(`${name} Humidity`);
     this.show(humidity, C.CurrentRelativeHumidity, (state) => clamp(state.humidity, 0, 100));
-    this.services.push(humidity);
+    this.add(humidity);
 
     if (this.config.outdoorTemperature) {
       const outdoor = new S.TemperatureSensor(`${name} Outdoor`, 'outdoor');
       outdoor.getCharacteristic(C.CurrentTemperature).setProps({ minValue: -50, maxValue: 60 });
       this.show(outdoor, C.CurrentTemperature, (state) => state.outdoorTemperature);
-      this.services.push(outdoor);
+      this.add(outdoor);
     }
 
     if (this.config.filter) {
@@ -237,7 +259,7 @@ export class SystemairVentilator implements AccessoryPlugin {
           ? C.FilterChangeIndication.CHANGE_FILTER
           : C.FilterChangeIndication.FILTER_OK
       );
-      this.services.push(filter);
+      this.add(filter);
     }
   }
 
@@ -273,7 +295,7 @@ export class SystemairVentilator implements AccessoryPlugin {
         this.assume({ mode: 'manual' });
       }
     });
-    this.services.push(fan);
+    this.add(fan);
   }
 
   private async stopFans(state: IVentilatorState): Promise<void> {
@@ -344,7 +366,7 @@ export class SystemairVentilator implements AccessoryPlugin {
           setTimeout(() => this.push(), 0);
         }
       });
-      this.services.push(service);
+      this.add(service);
     }
   }
 
@@ -390,7 +412,7 @@ export class SystemairVentilator implements AccessoryPlugin {
         await this.send(durationWrite(mode, minutes), `${this.modeName(id)} lasts ${minutes} ${duration.unit}`);
         this.assume({ durations: { ...state.durations, [id]: minutes } });
       });
-      this.services.push(service);
+      this.add(service);
     }
   }
 
@@ -435,7 +457,16 @@ export class SystemairVentilator implements AccessoryPlugin {
         this.assume({ mode: 'auto' });
       }
     });
-    this.services.push(thermostat);
+    this.add(thermostat);
+  }
+}
+
+/** The names file in Homebridge's storage, when there is one (not in tests). */
+function namesFileIn(api: API): string | undefined {
+  try {
+    return path.join(api.user.storagePath(), 'systemair-ventilator-names.json');
+  } catch {
+    return undefined;
   }
 }
 

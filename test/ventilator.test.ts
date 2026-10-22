@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import * as hap from '@homebridge/hap-nodejs';
 import type { API, Logging, Service } from 'homebridge';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +13,11 @@ const api = { hap, on: vi.fn() } as unknown as API;
 const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logging;
 
 /** The accessory on a stand-in unit that answers `reply` and records what's written. */
-function ventilator(reply: Record<string, number> = UNIT_REPLY, config: Record<string, unknown> = {}) {
+function ventilator(
+  reply: Record<string, number> = UNIT_REPLY,
+  config: Record<string, unknown> = {},
+  namesFile?: string
+) {
   let current = { ...reply };
   const writes: TRegisterWrite[] = [];
   const client: IVentilatorClient = {
@@ -23,7 +30,7 @@ function ventilator(reply: Record<string, number> = UNIT_REPLY, config: Record<s
     log,
     { accessory: 'SystemairVentilatorEnhanced', name: 'Ventilation', ip: '192.168.68.57', ...config },
     api,
-    { client, autoPoll: false }
+    { client, autoPoll: false, namesFile }
   );
   return {
     accessory,
@@ -69,6 +76,26 @@ describe('the ventilator in HomeKit', () => {
       ['Ventilation Outdoor', 'outdoor'],
       ['Ventilation Filter', undefined],
     ]);
+  });
+
+  it('names every tile in the Home app, not just "Ventilation"', () => {
+    const unit = ventilator();
+    for (const service of unit.accessory.getServices()) {
+      if (service.UUID === S.AccessoryInformation.UUID) continue;
+      expect(service.getCharacteristic(C.ConfiguredName).value).toBe(service.displayName);
+    }
+  });
+
+  it('keeps a name given in the Home app across a restart', async () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'systemair-')), 'names.json');
+    const first = ventilator(UNIT_REPLY, {}, file);
+    await set(first.service('Ventilation Refresh'), C.ConfiguredName, 'Air out');
+    const again = ventilator(UNIT_REPLY, {}, file);
+    expect(value(again.service('Ventilation Refresh'), C.ConfiguredName)).toBe('Air out');
+    expect(value(again.service('Ventilation Fan'), C.ConfiguredName)).toBe('Ventilation Fan');
+    // Another ventilator's names are its own.
+    const other = ventilator(UNIT_REPLY, { name: 'Upstairs' }, file);
+    expect(value(other.service('Upstairs Refresh'), C.ConfiguredName)).toBe('Upstairs Refresh');
   });
 
   it('shows what the unit is doing once it has read it', async () => {

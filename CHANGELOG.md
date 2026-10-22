@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1
+
+### Fixed
+
+- **Every tile read "Ventilation" in the Home app.** Since iOS 16 the Home app shows a tile's own name only from its ConfiguredName, which the plugin now sets on each one: "Ventilation Refresh", "Ventilation Fan" and so on. A name you give a tile in the Home app is kept across restarts.
+
 ## 2.0.0
 
 A rewrite: faster, a switch for every mode, timers, and the fan's real level.
