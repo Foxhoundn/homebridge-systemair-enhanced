@@ -1,7 +1,7 @@
 {
   "name": "@lv426/homebridge-systemair-enhanced",
   "displayName": "Systemair Ventilator",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Systemair SAVE ventilation in HomeKit through SAVE Connect: modes for scenes (Refresh, Fireplace, Crowded, Away, Holiday) with their durations, the fan's real speed, temperature, humidity and the filter.",
   "main": "dist/index.js",
   "type": "commonjs",
