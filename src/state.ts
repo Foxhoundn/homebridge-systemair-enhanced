@@ -160,6 +160,28 @@ function modeRequest(id: TModeId): number {
   return request;
 }
 
+/** Auto, or Manual at a level: what a timed mode interrupts, and what turning it off brings back. */
+export interface ISteadyMode {
+  mode: 'auto' | 'manual';
+  manualLevel: number;
+}
+
+/** The steady mode the unit is in, if it's in one (not in Refresh, Away…). */
+export function steadyOf(state: IVentilatorState): ISteadyMode | undefined {
+  return state.mode === 'auto' || state.mode === 'manual'
+    ? { mode: state.mode, manualLevel: state.manualLevel }
+    : undefined;
+}
+
+/** Back to a steady mode: Auto, or Manual at its level. */
+export function steadyWrite(steady: ISteadyMode): TRegisterWrite {
+  if (steady.mode === 'auto') return AUTO_WRITE;
+  return {
+    [REGISTER.manualLevel]: steady.manualLevel,
+    [REGISTER.modeRequest]: modeRequest('manual'),
+  };
+}
+
 /** Manual mode at a level it can run at (Off stops the fans). */
 export function manualWrite(level: IFanLevel): TRegisterWrite {
   if (!level.manual) throw new Error(`Manual mode can't run at ${level.name}`);

@@ -17,7 +17,7 @@ import {
   type IModeDuration,
   type TModeId,
 } from './modes.js';
-import { fanLevel, SETPOINT_RANGE } from './registers.js';
+import { FAN_LEVELS, fanLevel, SETPOINT_RANGE } from './registers.js';
 import { SaveConnect } from './saveConnect.js';
 import {
   AUTO_WRITE,
@@ -32,6 +32,9 @@ import {
   POLL_REGISTERS,
   readState,
   setpointWrite,
+  steadyOf,
+  steadyWrite,
+  type ISteadyMode,
   type IVentilatorState,
   type TRegisterValues,
   type TRegisterWrite,
@@ -72,6 +75,8 @@ export class SystemairVentilator implements AccessoryPlugin {
   private readonly services: Service[] = [];
   private readonly readers: Array<{ service: Service; type: TCharacteristic; read: TReader }> = [];
   private state?: IVentilatorState;
+  /** The mode a timed one interrupted, to go back to when it's turned off. */
+  private steady: ISteadyMode = { mode: 'auto', manualLevel: fanLevel('low').value };
   private failures = 0;
   private timer?: ReturnType<typeof setInterval>;
   private readBack?: ReturnType<typeof setTimeout>;
@@ -114,6 +119,7 @@ export class SystemairVentilator implements AccessoryPlugin {
         );
       this.failures = 0;
       this.state = state;
+      this.steady = steadyOf(state) ?? this.steady;
       this.push();
     } catch (error) {
       this.failures += 1;
@@ -171,7 +177,17 @@ export class SystemairVentilator implements AccessoryPlugin {
   private assume(change: Partial<IVentilatorState>): void {
     if (!this.state) return;
     this.state = { ...this.state, ...change };
+    this.steady = steadyOf(this.state) ?? this.steady;
     this.push();
+  }
+
+  /** Turns a timed mode off: back to what it interrupted (Auto, or Manual at its level). */
+  private async endMode(id: TModeId): Promise<void> {
+    const steady = this.steady;
+    const back =
+      steady.mode === 'auto' ? 'Auto' : `Manual at ${levelName(steady.manualLevel)}`;
+    await this.send(steadyWrite(steady), `${this.modeName(id)} off: back to ${back}`);
+    this.assume({ mode: steady.mode, manualLevel: steady.manualLevel, remainingSeconds: 0 });
   }
 
   private build(): void {
@@ -301,7 +317,10 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.speed = { percent, timer };
   }
 
-  /** A switch per mode, only one on at a time; turning the one that's on off goes back to Auto. */
+  /**
+   * A switch per mode, only one on at a time. Turning the one that's on off goes back to what it
+   * interrupted (Auto, or Manual at its level); Auto turns off by choosing another mode.
+   */
   private buildModes(name: string): void {
     const { Service: S, Characteristic: C } = this.hap;
     for (const id of this.config.modeSwitches) {
@@ -319,8 +338,7 @@ export class SystemairVentilator implements AccessoryPlugin {
           await this.send(modeWrite(mode), this.modeName(id));
           this.assume({ mode: id });
         } else if (state.mode === id && id !== 'auto') {
-          await this.send(AUTO_WRITE, `${this.modeName(id)} off: back to Auto`);
-          this.assume({ mode: 'auto' });
+          await this.endMode(id);
         } else if (id === 'auto') {
           // Auto turns off by choosing another mode; show it on again.
           setTimeout(() => this.push(), 0);
@@ -363,8 +381,7 @@ export class SystemairVentilator implements AccessoryPlugin {
           await this.send(modeWrite(mode), `${this.modeName(id)} for ${this.durationWords(mode, state)}`);
           this.assume({ mode: id, remainingSeconds: durationSeconds(duration, state.durations[id] ?? 0) });
         } else if (running(state)) {
-          await this.send(AUTO_WRITE, `${this.modeName(id)} off: back to Auto`);
-          this.assume({ mode: 'auto', remainingSeconds: 0 });
+          await this.endMode(id);
         }
       });
       service.getCharacteristic(C.SetDuration).onSet(async (value) => {
@@ -420,6 +437,10 @@ export class SystemairVentilator implements AccessoryPlugin {
     });
     this.services.push(thermostat);
   }
+}
+
+function levelName(value: number): string {
+  return FAN_LEVELS.find((level) => level.value === value)?.name ?? `level ${value}`;
 }
 
 function clamp(value: number, min: number, max: number): number {

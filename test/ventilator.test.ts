@@ -127,6 +127,17 @@ describe('the ventilator in HomeKit', () => {
     expect(unit.writes).toEqual([{ 1161: 1 }]);
   });
 
+  it('goes back to Manual at High when Refresh interrupted it, however Refresh was started', async () => {
+    const unit = ventilator({ ...UNIT_REPLY, '1160': 1, '1130': 4, '14000': 95, '14001': 80 });
+    await unit.accessory.poll();
+    // Refresh started from the unit's own panel, then turned off from HomeKit.
+    unit.answer({ ...REFRESH_REPLY, '1130': 4 });
+    await unit.accessory.poll();
+    await set(unit.service('Ventilation Refresh timer'), C.Active, C.Active.INACTIVE);
+    expect(unit.writes).toEqual([{ 1130: 4, 1161: 2 }]);
+    expect(value(unit.service('Ventilation Fan'), C.TargetFanState)).toBe(C.TargetFanState.MANUAL);
+  });
+
   it('sets how long Refresh lasts from its timer’s duration, in whole minutes', async () => {
     const unit = ventilator();
     await unit.accessory.poll();

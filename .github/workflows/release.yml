@@ -1,0 +1,91 @@
+name: Release
+
+# Publishes to npm whenever master has a version npm doesn't have yet: bump it with
+# `npm version patch` (or minor, major, prerelease) and push. A prerelease (2.1.0-beta.1) goes
+# out under the `beta` tag. Then it tags the commit, makes a GitHub release and tells Discord.
+#
+# npm: trusted publishing for this workflow (release.yml), so no token is needed; NPM_TOKEN is
+# used only until that's set up.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write # the tag and the GitHub release
+  id-token: write # npm trusted publishing and provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm run check
+
+      - name: Is this version on npm yet?
+        id: version
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *-* ]]; then echo "tag=beta" >> "$GITHUB_OUTPUT"; else echo "tag=latest" >> "$GITHUB_OUTPUT"; fi
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "$NAME@$VERSION is already on npm: nothing to publish."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to npm
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish --provenance --access public --tag "${{ steps.version.outputs.tag }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag and release on GitHub
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          git tag "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" --generate-notes --title "$TAG" \
+            ${{ steps.version.outputs.tag == 'beta' && '--prerelease' || '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Tell Discord it's out
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          jq -n \
+            --arg name "${{ steps.version.outputs.name }}" \
+            --arg version "$VERSION" \
+            --arg tag "${{ steps.version.outputs.tag }}" \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/releases/tag/v$VERSION" \
+            '{content: "📦 **\($name)** \($version) is on npm (\($tag)). What changed: \($url)"}' \
+          | curl --fail --silent --show-error -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK"
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Tell Discord it failed
+        if: failure()
+        run: |
+          jq -n \
+            --arg url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            '{content: "⚠️ The Systemair plugin release failed: \($url)"}' \
+          | curl --fail --silent --show-error -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK"
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
