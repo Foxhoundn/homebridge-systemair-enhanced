@@ -46,6 +46,8 @@ function ventilator(
 }
 type TCharacteristic = hap.WithUUID<new () => hap.Characteristic>;
 const value = (service: Service, type: TCharacteristic) => service.getCharacteristic(type).value;
+/** Every mode with a switch, Refresh and Fireplace too (their timers are then "… timer"). */
+const ALL_SWITCHES = { modeSwitches: ['auto', 'crowded', 'refresh', 'fireplace', 'away', 'holiday'] };
 const set = (service: Service, type: TCharacteristic, next: hap.CharacteristicValue) =>
   service.getCharacteristic(type).handleSetRequest(next);
 
@@ -54,7 +56,7 @@ afterEach(() => {
 });
 
 describe('the ventilator in HomeKit', () => {
-  it('keeps the tiles it always had, and adds a switch per mode and a timer for the short ones', () => {
+  it('shows a switch per mode, and a timer instead for the short ones', () => {
     const unit = ventilator();
     const names = unit.accessory.getServices().map((service) => [service.displayName, service.subtype]);
     expect(names).toEqual([
@@ -63,19 +65,24 @@ describe('the ventilator in HomeKit', () => {
       ['Ventilation Fan', undefined],
       ['Ventilation Auto', 'mode-auto'],
       ['Ventilation Visitors', 'mode-crowded'],
-      // The Refresh switch keeps 1.0.6's subtype, so scenes and automations using it keep working.
-      ['Ventilation Refresh', 'refresh'],
-      ['Ventilation Fireplace', 'mode-fireplace'],
       ['Ventilation Away', 'mode-away'],
       ['Ventilation Holiday', 'mode-holiday'],
-      ['Ventilation Refresh timer', 'timer-refresh'],
-      ['Ventilation Fireplace timer', 'timer-fireplace'],
+      // Refresh and Fireplace are their timers: on, off, how long, and the countdown.
+      ['Ventilation Refresh', 'timer-refresh'],
+      ['Ventilation Fireplace', 'timer-fireplace'],
       ['Ventilation Thermostat', undefined],
       ['Ventilation Eco Mode', 'eco'],
       ['Ventilation Humidity', undefined],
       ['Ventilation Outdoor', 'outdoor'],
       ['Ventilation Filter', undefined],
     ]);
+  });
+
+  it('keeps 1.0.6’s Refresh switch where the settings ask for it, its timer then named “timer”', () => {
+    const unit = ventilator(UNIT_REPLY, ALL_SWITCHES);
+    const refresh = unit.service('Ventilation Refresh');
+    expect([refresh.UUID, refresh.subtype]).toEqual([S.Switch.UUID, 'refresh']);
+    expect(unit.service('Ventilation Refresh timer').UUID).toBe(S.Valve.UUID);
   });
 
   it('names every tile in the Home app, not just "Ventilation"', () => {
@@ -107,23 +114,22 @@ describe('the ventilator in HomeKit', () => {
     expect(value(fan, C.RotationSpeed)).toBe(16);
     expect(value(fan, C.TargetFanState)).toBe(C.TargetFanState.AUTO);
     expect(value(unit.service('Ventilation Auto'), C.On)).toBe(true);
-    expect(value(unit.service('Ventilation Refresh'), C.On)).toBe(false);
+    expect(value(unit.service('Ventilation Refresh'), C.Active)).toBe(C.Active.INACTIVE);
     const thermostat = unit.service('Ventilation Thermostat');
     expect(value(thermostat, C.CurrentTemperature)).toBeCloseTo(22.4);
     expect(value(thermostat, C.TargetTemperature)).toBe(22);
     expect(value(unit.service('Ventilation Humidity'), C.CurrentRelativeHumidity)).toBe(46);
     expect(value(unit.service('Ventilation Outdoor'), C.CurrentTemperature)).toBeCloseTo(10.1);
     expect(value(unit.service('Ventilation Filter'), C.FilterLifeLevel)).toBe(44);
-    expect(value(unit.service('Ventilation Refresh timer'), C.SetDuration)).toBe(35 * 60);
+    expect(value(unit.service('Ventilation Refresh'), C.SetDuration)).toBe(35 * 60);
   });
 
   it('shows Refresh as running, at Maximum (not the manual setting’s 16%), counting down', async () => {
     const unit = ventilator(REFRESH_REPLY);
     await unit.accessory.poll();
     expect(value(unit.service('Ventilation Fan'), C.RotationSpeed)).toBe(100);
-    expect(value(unit.service('Ventilation Refresh'), C.On)).toBe(true);
     expect(value(unit.service('Ventilation Auto'), C.On)).toBe(false);
-    const timer = unit.service('Ventilation Refresh timer');
+    const timer = unit.service('Ventilation Refresh');
     expect(value(timer, C.Active)).toBe(C.Active.ACTIVE);
     expect(value(timer, C.InUse)).toBe(C.InUse.IN_USE);
     expect(value(timer, C.RemainingDuration)).toBe(1800);
@@ -131,7 +137,7 @@ describe('the ventilator in HomeKit', () => {
 
   it('starts Refresh from its switch and changes nothing else', async () => {
     vi.useFakeTimers();
-    const unit = ventilator();
+    const unit = ventilator(UNIT_REPLY, ALL_SWITCHES);
     await unit.accessory.poll();
     await set(unit.service('Ventilation Refresh'), C.On, true);
     expect(unit.writes).toEqual([{ 1161: 4 }]);
@@ -146,7 +152,7 @@ describe('the ventilator in HomeKit', () => {
   });
 
   it('goes back to Auto when the mode that’s on is turned off, and ignores turning off one that isn’t', async () => {
-    const unit = ventilator(REFRESH_REPLY);
+    const unit = ventilator(REFRESH_REPLY, ALL_SWITCHES);
     await unit.accessory.poll();
     await set(unit.service('Ventilation Fireplace'), C.On, false);
     expect(unit.writes).toEqual([]);
@@ -160,7 +166,7 @@ describe('the ventilator in HomeKit', () => {
     // Refresh started from the unit's own panel, then turned off from HomeKit.
     unit.answer({ ...REFRESH_REPLY, '1130': 4 });
     await unit.accessory.poll();
-    await set(unit.service('Ventilation Refresh timer'), C.Active, C.Active.INACTIVE);
+    await set(unit.service('Ventilation Refresh'), C.Active, C.Active.INACTIVE);
     expect(unit.writes).toEqual([{ 1130: 4, 1161: 2 }]);
     expect(value(unit.service('Ventilation Fan'), C.TargetFanState)).toBe(C.TargetFanState.MANUAL);
   });
@@ -168,7 +174,7 @@ describe('the ventilator in HomeKit', () => {
   it('sets how long Refresh lasts from its timer’s duration, in whole minutes', async () => {
     const unit = ventilator();
     await unit.accessory.poll();
-    const timer = unit.service('Ventilation Refresh timer');
+    const timer = unit.service('Ventilation Refresh');
     await set(timer, C.SetDuration, 45 * 60);
     expect(unit.writes).toEqual([{ 1103: 45 }]);
     expect(value(timer, C.SetDuration)).toBe(45 * 60);
@@ -199,7 +205,7 @@ describe('the ventilator in HomeKit', () => {
     await vi.advanceTimersByTimeAsync(400);
     expect(unit.writes).toEqual([{ 1161: 4 }]);
     expect(value(fan, C.RotationSpeed)).toBe(100);
-    expect(value(unit.service('Ventilation Refresh'), C.On)).toBe(true);
+    expect(value(unit.service('Ventilation Refresh'), C.Active)).toBe(C.Active.ACTIVE);
     // Just below it is High.
     await set(fan, C.RotationSpeed, 85);
     await vi.advanceTimersByTimeAsync(400);

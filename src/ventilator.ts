@@ -380,7 +380,12 @@ export class SystemairVentilator implements AccessoryPlugin {
       const mode = modeById(id);
       const duration = mode.duration;
       if (!duration) continue;
-      const service = new S.Valve(`${name} ${this.modeName(id)} timer`, `timer-${id}`);
+      // Named after its mode, as it's what turns the mode on ("Ventilation Refresh"), unless the
+      // mode has a switch too.
+      const timerName = this.config.modeSwitches.includes(id)
+        ? `${name} ${this.modeName(id)} timer`
+        : `${name} ${this.modeName(id)}`;
+      const service = new S.Valve(timerName, `timer-${id}`);
       const running = (state: IVentilatorState) => state.mode === id;
       service.setCharacteristic(C.ValveType, C.ValveType.GENERIC_VALVE);
       this.show(service, C.Active, (state) => (running(state) ? C.Active.ACTIVE : C.Active.INACTIVE));

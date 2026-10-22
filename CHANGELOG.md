@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.0
+
+### Changed
+
+- **Refresh and Fireplace are their timers.** A timer turns its mode on and off, sets how long it lasts and counts down, so the separate Refresh and Fireplace switches are gone by default, and the timers are named after their modes ("Ventilation Refresh"). Scenes and automations that used the Refresh switch need the Refresh timer instead. To keep the switches, tick them under **Modes to show as switches** in the settings.
+
+### New
+
+- The README explains using **Fireplace** while cooking under a hood that vents outside, and naming it "Cooking".
+
 ## 2.0.1
 
 ### Fixed

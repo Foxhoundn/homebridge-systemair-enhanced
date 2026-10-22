@@ -25,8 +25,8 @@ It talks to the unit's **SAVE Connect** module the same way the module's own web
 | Tile | What it does |
 | --- | --- |
 | **Fan** | Shows the level the fans really run at, Auto included. Drag it to run them manually at Low, Normal or High; drag it to the top to start Refresh; switch it back to Auto, or off. |
-| **Auto, Visitors, Refresh, Fireplace, Away, Holiday** | A switch per mode, for scenes and automations. Only one is on at a time. Turning the one that's on off goes back to what it interrupted: Auto, or the manual level you had. |
-| **Refresh timer, Fireplace timer** | Set how long the mode lasts (the tile's Duration), turn it on, and watch it count down. |
+| **Auto, Visitors, Away, Holiday** | A switch per mode, for scenes and automations. Only one mode is on at a time. Turning the one that's on off goes back to what it interrupted: Auto, or the manual level you had. |
+| **Refresh, Fireplace** | Timers (they look like a water tap in the Home app): set how long the mode lasts in the tile's settings (Duration), turn it on, and watch it count down. Off ends it early. |
 | **Thermostat** | The temperature in the house and the setpoint (12–30 °C). |
 | **Eco Mode** | The unit's ECO mode. |
 | **Humidity** | Relative humidity of the extract air. |
@@ -64,6 +64,10 @@ How long each mode lasts is the unit's own setting: the timer tiles change it fo
 
 *Cooker hood* and *Vacuum cleaner* modes are started by switches wired to the unit, so HomeKit can't start them.
 
+### Cooking with a hood that vents outside
+
+A hood that blows air out of the house leaves it in underpressure, pulling air in through every gap. **Fireplace** is the mode for that: it pushes air in harder than it pulls it out (supply at Maximum and extract at Minimum, set on the unit). Name it after what you use it for in the plugin's settings (`"modeNames": { "fireplace": "Cooking" }`) and turn **Cooking** on when you start cooking. No mode switches the extract fan fully off; Minimum is as low as the unit goes.
+
 ## Install
 
 Search for **Systemair Ventilator** under **Plugins** in Homebridge's web interface and install it, or:
@@ -94,9 +98,9 @@ Fill them in under the plugin's **Settings** in Homebridge's web interface, or a
 | --- | --- | --- |
 | `name` | Each tile is named after it: "Ventilation Fan", "Ventilation Refresh". | `Ventilation` |
 | `ip` | The SAVE Connect module's address. | — |
-| `modeSwitches` | The modes shown as switches: `auto`, `crowded`, `refresh`, `fireplace`, `away`, `holiday`. | all six |
-| `timers` | The modes with a timer tile: `refresh`, `fireplace`. | both |
-| `modeNames` | Your own names, for example `{ "refresh": "Air out" }`. | Crowded is `Visitors`; the rest as on the unit |
+| `modeSwitches` | The modes shown as switches: `auto`, `crowded`, `refresh`, `fireplace`, `away`, `holiday`. | the four without a timer |
+| `timers` | The modes shown as a timer: `refresh`, `fireplace`. | both |
+| `modeNames` | Your own names, for example `{ "fireplace": "Cooking" }`. | Crowded is `Visitors`; the rest as on the unit |
 | `eco` | Show the ECO mode switch. | `true` |
 | `outdoorTemperature` | Show the outdoor temperature. | `true` |
 | `filter` | Show the filter. | `true` |

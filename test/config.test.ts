@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODE_SWITCHES, DEFAULT_TIMERS, readConfig } from '../src/config.js';
+import { DEFAULT_TIMERS, readConfig } from '../src/config.js';
 
 describe('the plugin’s settings', () => {
   it('needs the unit’s address', () => {
@@ -11,7 +11,8 @@ describe('the plugin’s settings', () => {
       name: 'Ventilation',
       ip: '192.168.68.57',
       pollSeconds: 10,
-      modeSwitches: DEFAULT_MODE_SWITCHES,
+      // Refresh and Fireplace have timers, which turn them on and off.
+      modeSwitches: ['auto', 'crowded', 'away', 'holiday'],
       timers: DEFAULT_TIMERS,
       modeNames: { crowded: 'Visitors' },
       eco: true,

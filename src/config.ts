@@ -7,7 +7,11 @@ export interface IVentilatorConfig {
   ip: string;
   /** How often the unit is read. */
   pollSeconds: number;
-  /** The modes shown as switches, for scenes and automations. */
+  /**
+   * The modes shown as switches, for scenes and automations. By default every mode without a
+   * timer: a timer turns its mode on and off itself, so a switch for it would be a second tile
+   * for the same thing.
+   */
   modeSwitches: readonly TModeId[];
   /**
    * Timed modes also shown as a valve: the Home app's Duration picker sets how long the mode
@@ -22,7 +26,8 @@ export interface IVentilatorConfig {
   filter: boolean;
 }
 
-export const DEFAULT_MODE_SWITCHES: readonly TModeId[] = [
+/** Every mode a switch can show (Manual is the fan's own speed). */
+export const SWITCHABLE_MODES: readonly TModeId[] = [
   'auto',
   'crowded',
   'refresh',
@@ -54,12 +59,17 @@ export function readConfig(raw: unknown): IVentilatorConfig {
   const names = isRecord(config.modeNames) ? config.modeNames : {};
   const settable = SETTABLE_MODES.map((mode) => mode.id).filter((id) => id !== 'manual');
   const timed = MODES.filter((mode) => mode.duration?.unit === 'minutes').map((mode) => mode.id);
+  const timers = modeList(config.timers, timed, DEFAULT_TIMERS);
   return {
     name: typeof config.name === 'string' && config.name.trim() ? config.name.trim() : 'Ventilation',
     ip,
     pollSeconds: Number.isFinite(poll) && poll >= MIN_POLL_SECONDS ? poll : 10,
-    modeSwitches: modeList(config.modeSwitches, settable, DEFAULT_MODE_SWITCHES),
-    timers: modeList(config.timers, timed, DEFAULT_TIMERS),
+    modeSwitches: modeList(
+      config.modeSwitches,
+      settable,
+      SWITCHABLE_MODES.filter((id) => !timers.includes(id))
+    ),
+    timers,
     modeNames: {
       ...DEFAULT_MODE_NAMES,
       ...Object.fromEntries(
