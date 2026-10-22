@@ -9,7 +9,9 @@
     "dist",
     "config.schema.json",
     "icon.png",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -23,8 +25,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/foxhoundn/homebridge-systemair-ventilator.git"
+    "url": "git+https://github.com/Foxhoundn/homebridge-systemair-enhanced.git"
   },
+  "bugs": {
+    "url": "https://github.com/Foxhoundn/homebridge-systemair-enhanced/issues"
+  },
+  "homepage": "https://github.com/Foxhoundn/homebridge-systemair-enhanced#readme",
   "keywords": [
     "homebridge-plugin",
     "homebridge",
@@ -45,7 +51,7 @@
   "homebridge": {
     "pluginAlias": "SystemairVentilatorEnhanced",
     "pluginType": "accessory",
-    "icon": "https://raw.githubusercontent.com/foxhoundn/homebridge-systemair-ventilator/master/icon.png"
+    "icon": "https://raw.githubusercontent.com/Foxhoundn/homebridge-systemair-enhanced/master/icon.png"
   },
   "devDependencies": {
     "@homebridge/hap-nodejs": "2.2.2",

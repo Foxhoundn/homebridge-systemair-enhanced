@@ -2,7 +2,8 @@ name: Release
 
 # Publishes to npm whenever master has a version npm doesn't have yet: bump it with
 # `npm version patch` (or minor, major, prerelease) and push. A prerelease (2.1.0-beta.1) goes
-# out under the `beta` tag. Then it tags the commit, makes a GitHub release and tells Discord.
+# out under the `beta` tag. Then it tags the commit, makes a GitHub release with the version's
+# notes from CHANGELOG.md, and tells Discord.
 #
 # npm: trusted publishing for this workflow (release.yml), so no token is needed; NPM_TOKEN is
 # used only until that's set up.
@@ -55,14 +56,23 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # The release notes are the version's section of CHANGELOG.md ("## 2.0.0"), or GitHub's
+      # own list of changes when it has none.
       - name: Tag and release on GitHub
         if: steps.version.outputs.publish == 'true'
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
-          git tag "$TAG"
-          git push origin "$TAG"
-          gh release create "$TAG" --generate-notes --title "$TAG" \
-            ${{ steps.version.outputs.tag == 'beta' && '--prerelease' || '' }}
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
+          awk -v heading="## $VERSION" '$0 == heading {found=1; next} found && /^## / {exit} found' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then NOTES=(--notes-file notes.md); else NOTES=(--generate-notes); fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG is already tagged."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+          gh release create "$TAG" --title "$TAG" "${NOTES[@]}" \
+            ${{ steps.version.outputs.tag == 'beta' && '--prerelease' || '--latest' }}
         env:
           GH_TOKEN: ${{ github.token }}
 
