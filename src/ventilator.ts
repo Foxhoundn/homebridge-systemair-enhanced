@@ -66,6 +66,13 @@ const STALE_AFTER_FAILURES = 3;
 const READ_BACK_MS = 1500;
 /** The Home app sends a fan speed many times while you drag; only the last one is written. */
 const SPEED_SETTLE_MS = 400;
+/**
+ * A fan speed that comes this soon after a mode was chosen is part of the same recall or scene
+ * (they write every setting at once, a little apart): the mode wins. Without this, a recall that
+ * put Ventilation Auto back on also put back the speed Auto showed (16%), which means Manual at
+ * Low, and Auto was gone again (Filip, 2026-10-22).
+ */
+const MODE_WINS_MS = 5000;
 
 /**
  * A Systemair SAVE unit as one HomeKit accessory: the fan (its real speed, Auto or a manual
@@ -86,6 +93,8 @@ export class SystemairVentilator implements AccessoryPlugin {
   private timer?: ReturnType<typeof setInterval>;
   private readBack?: ReturnType<typeof setTimeout>;
   private speed?: { percent: number; timer: ReturnType<typeof setTimeout> };
+  /** When a mode was last chosen from HomeKit (switched on, or a running one off). */
+  private modeChosenAt = -Infinity;
 
   public constructor(
     private readonly log: Logging,
@@ -288,6 +297,7 @@ export class SystemairVentilator implements AccessoryPlugin {
     fan.getCharacteristic(C.RotationSpeed).onSet((value) => this.setSpeed(Number(value)));
     fan.getCharacteristic(C.TargetFanState).onSet(async (value) => {
       if (value === C.TargetFanState.AUTO) {
+        this.chooseMode();
         await this.send(AUTO_WRITE, 'Back to Auto');
         this.assume({ mode: 'auto' });
       } else {
@@ -309,11 +319,25 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.assume({ mode: 'manual', manualLevel: 0, fanLevel: 'off' });
   }
 
+  /** A mode chosen from HomeKit: a fan speed waiting to be sent, or coming with it, gives way. */
+  private chooseMode(): void {
+    this.modeChosenAt = Date.now();
+    if (!this.speed) return;
+    clearTimeout(this.speed.timer);
+    this.log.info(`Fan speed ${this.speed.percent}% not set: a mode was chosen with it`);
+    this.speed = undefined;
+  }
+
   /**
    * A fan speed from the Home app, once the slider settles: Manual at Low, Normal or High, or at
-   * the top Refresh, the only way to Maximum (for its set time, then back to Auto).
+   * the top Refresh, the only way to Maximum (for its set time, then back to Auto). One that comes
+   * with a mode (a recall, a scene) is left out: the mode wins.
    */
   private setSpeed(percent: number): void {
+    if (Date.now() - this.modeChosenAt < MODE_WINS_MS) {
+      this.log.info(`Fan speed ${percent}% not set: a mode was chosen with it`);
+      return;
+    }
     if (this.speed) clearTimeout(this.speed.timer);
     const timer = setTimeout(() => {
       this.speed = undefined;
@@ -356,10 +380,12 @@ export class SystemairVentilator implements AccessoryPlugin {
       service.getCharacteristic(C.On).onSet(async (value) => {
         const state = this.current();
         if (value) {
+          this.chooseMode();
           if (state.mode === id) return;
           await this.send(modeWrite(mode), this.modeName(id));
           this.assume({ mode: id });
         } else if (state.mode === id && id !== 'auto') {
+          this.chooseMode();
           await this.endMode(id);
         } else if (id === 'auto') {
           // Auto turns off by choosing another mode; show it on again.
@@ -404,10 +430,12 @@ export class SystemairVentilator implements AccessoryPlugin {
       service.getCharacteristic(C.Active).onSet(async (value) => {
         const state = this.current();
         if (value === C.Active.ACTIVE) {
+          this.chooseMode();
           if (running(state)) return;
           await this.send(modeWrite(mode), `${this.modeName(id)} for ${this.durationWords(mode, state)}`);
           this.assume({ mode: id, remainingSeconds: durationSeconds(duration, state.durations[id] ?? 0) });
         } else if (running(state)) {
+          this.chooseMode();
           await this.endMode(id);
         }
       });

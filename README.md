@@ -47,7 +47,7 @@ The slider shows and sets the unit's airflow levels:
 | 67–91% | Manual, **High** | 83% |
 | 92–100% | **Refresh**, at Maximum for its set time, then back to what it was doing | 100% |
 
-Manual mode can't go above High: Maximum is reached only by modes like Refresh. Turning the fans off needs **Manual fan stop** allowed on the unit.
+Manual mode can't go above High: Maximum is reached only by modes like Refresh. A scene or a recall that sets a mode and a fan speed together keeps the mode: the speed is left out. Turning the fans off needs **Manual fan stop** allowed on the unit.
 
 ### The modes
 

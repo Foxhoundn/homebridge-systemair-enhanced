@@ -212,6 +212,48 @@ describe('the ventilator in HomeKit', () => {
     expect(unit.writes.at(-1)).toEqual({ 1130: 4, 1161: 2 });
   });
 
+  it('keeps Auto when a recall puts it back together with the speed Auto showed', async () => {
+    // As Carbon Dioxide High's recall did at 15:18: Refresh off, Ventilation Auto on, then the
+    // fan at 16% (what Auto at Low shows), a little apart.
+    vi.useFakeTimers();
+    const unit = ventilator();
+    await unit.accessory.poll();
+    unit.answer(REFRESH_REPLY);
+    await unit.accessory.poll();
+    await set(unit.service('Ventilation Refresh'), C.Active, C.Active.INACTIVE);
+    // The unit goes back to Auto, as it does.
+    unit.answer(UNIT_REPLY);
+    await vi.advanceTimersByTimeAsync(300);
+    await set(unit.service('Ventilation Auto'), C.On, true);
+    await vi.advanceTimersByTimeAsync(1200);
+    await set(unit.service('Ventilation Fan'), C.RotationSpeed, 16);
+    await vi.advanceTimersByTimeAsync(400);
+    // Refresh ended back in Auto; the speed didn't turn it into Manual at Low.
+    expect(unit.writes).toEqual([{ 1161: 1 }]);
+    expect(value(unit.service('Ventilation Auto'), C.On)).toBe(true);
+  });
+
+  it('keeps the mode when the speed comes first in the same moment', async () => {
+    vi.useFakeTimers();
+    const unit = ventilator({ ...UNIT_REPLY, '1160': 1, '1130': 4, '14000': 95, '14001': 80 });
+    await unit.accessory.poll();
+    await set(unit.service('Ventilation Fan'), C.RotationSpeed, 16);
+    await set(unit.service('Ventilation Auto'), C.On, true);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(unit.writes).toEqual([{ 1161: 1 }]);
+  });
+
+  it('takes a speed on its own again once the moment has passed', async () => {
+    vi.useFakeTimers();
+    const unit = ventilator({ ...UNIT_REPLY, '1160': 1, '1130': 4, '14000': 95, '14001': 80 });
+    await unit.accessory.poll();
+    await set(unit.service('Ventilation Auto'), C.On, true);
+    await vi.advanceTimersByTimeAsync(6000);
+    await set(unit.service('Ventilation Fan'), C.RotationSpeed, 50);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(unit.writes).toEqual([{ 1161: 1 }, { 1130: 3, 1161: 2 }]);
+  });
+
   it('stops the fans only where the unit allows it', async () => {
     const allowed = ventilator();
     await allowed.accessory.poll();

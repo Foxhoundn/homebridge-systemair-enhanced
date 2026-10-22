@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.3
+
+### Fixed
+
+- **A recall or scene that puts Ventilation Auto back ends in Auto.** It also puts back the fan speed Auto was showing (16% for Low), and a speed means "run manually at that level", so Auto was gone again a moment later. Now a mode chosen from HomeKit wins over a fan speed that comes with it, in either order, within a few seconds; a speed set on its own still runs the fans manually.
+
 ## 2.1.2
 
 ### Fixed
