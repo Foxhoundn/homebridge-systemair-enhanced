@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2
+
+### Fixed
+
+- **Your own names for the modes can be filled in.** The settings showed the heading with no fields under it. Each mode now has its own field there, so Fireplace can be named "Cooking".
+
 ## 2.1.1
 
 ### Changed

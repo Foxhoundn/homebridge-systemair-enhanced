@@ -86,7 +86,22 @@
       "type": "fieldset",
       "title": "Modes",
       "expandable": true,
-      "items": ["modeSwitches", "timers", "modeNames"]
+      "items": [
+        "modeSwitches",
+        "timers",
+        {
+          "type": "section",
+          "title": "Your own names for the modes",
+          "items": [
+            "modeNames.auto",
+            "modeNames.crowded",
+            "modeNames.refresh",
+            "modeNames.fireplace",
+            "modeNames.away",
+            "modeNames.holiday"
+          ]
+        }
+      ]
     },
     {
       "type": "fieldset",
