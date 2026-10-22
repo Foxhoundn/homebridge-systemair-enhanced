@@ -22,6 +22,7 @@ import { SaveConnect } from './saveConnect.js';
 import {
   AUTO_WRITE,
   durationWrite,
+  ecoWrite,
   filterLifePercent,
   isStopped,
   levelForSpeed,
@@ -195,6 +196,18 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.buildTimers(name);
     this.buildThermostat(name);
 
+    if (this.config.eco) {
+      // The switch 1.0.6 had: same name and subtype, so scenes using it still work.
+      const eco = new S.Switch(`${name} Eco Mode`, 'eco');
+      this.show(eco, C.On, (state) => state.eco);
+      eco.getCharacteristic(C.On).onSet(async (value) => {
+        const on = Boolean(value);
+        await this.send(ecoWrite(on), on ? 'ECO mode on' : 'ECO mode off');
+        this.assume({ eco: on });
+      });
+      this.services.push(eco);
+    }
+
     const humidity = new S.HumiditySensor(`${name} Humidity`);
     this.show(humidity, C.CurrentRelativeHumidity, (state) => clamp(state.humidity, 0, 100));
     this.services.push(humidity);
@@ -288,10 +301,10 @@ export class SystemairVentilator implements AccessoryPlugin {
     const { Service: S, Characteristic: C } = this.hap;
     for (const id of this.config.modeSwitches) {
       const mode = modeById(id);
-      // Refresh keeps the switch this plugin always had (no subtype), so scenes using it still work.
+      // Refresh keeps the switch 1.0.6 had (subtype "refresh"), so scenes using it still work.
       const service = new S.Switch(
         `${name} ${this.modeName(id)}`,
-        id === 'refresh' ? undefined : `mode-${id}`
+        id === 'refresh' ? 'refresh' : `mode-${id}`
       );
       this.show(service, C.On, (state) => state.mode === id);
       service.getCharacteristic(C.On).onSet(async (value) => {
@@ -379,14 +392,18 @@ export class SystemairVentilator implements AccessoryPlugin {
       await this.send(setpointWrite(celsius), `Temperature set to ${celsius} °C`);
       this.assume({ setpoint: celsius });
     });
-    // Off stops the fans (as before); Auto runs them. The unit has no separate heat or cool.
-    thermostat.getCharacteristic(C.TargetHeatingCoolingState).setProps({
-      validValues: [C.TargetHeatingCoolingState.OFF, C.TargetHeatingCoolingState.AUTO],
-    });
+    // Off stops the fans; any other choice runs them (Heat and Cool stay choosable, as in 1.0.6,
+    // so scenes that pick them still work). It heats while the house is below the setpoint.
     this.show(thermostat, C.TargetHeatingCoolingState, (state) =>
       isStopped(state) ? C.TargetHeatingCoolingState.OFF : C.TargetHeatingCoolingState.AUTO
     );
-    this.show(thermostat, C.CurrentHeatingCoolingState, () => C.CurrentHeatingCoolingState.OFF);
+    this.show(thermostat, C.CurrentHeatingCoolingState, (state) =>
+      isStopped(state)
+        ? C.CurrentHeatingCoolingState.OFF
+        : state.extractTemperature < state.setpoint
+          ? C.CurrentHeatingCoolingState.HEAT
+          : C.CurrentHeatingCoolingState.COOL
+    );
     thermostat.getCharacteristic(C.TargetHeatingCoolingState).onSet(async (value) => {
       const state = this.current();
       if (value === C.TargetHeatingCoolingState.OFF) {

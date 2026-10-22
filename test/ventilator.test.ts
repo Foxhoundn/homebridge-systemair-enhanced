@@ -56,14 +56,15 @@ describe('the ventilator in HomeKit', () => {
       ['Ventilation Fan', undefined],
       ['Ventilation Auto', 'mode-auto'],
       ['Ventilation Visitors', 'mode-crowded'],
-      // The Refresh switch keeps no subtype, so scenes and automations using it keep working.
-      ['Ventilation Refresh', undefined],
+      // The Refresh switch keeps 1.0.6's subtype, so scenes and automations using it keep working.
+      ['Ventilation Refresh', 'refresh'],
       ['Ventilation Fireplace', 'mode-fireplace'],
       ['Ventilation Away', 'mode-away'],
       ['Ventilation Holiday', 'mode-holiday'],
       ['Ventilation Refresh timer', 'timer-refresh'],
       ['Ventilation Fireplace timer', 'timer-fireplace'],
       ['Ventilation Thermostat', undefined],
+      ['Ventilation Eco Mode', 'eco'],
       ['Ventilation Humidity', undefined],
       ['Ventilation Outdoor', 'outdoor'],
       ['Ventilation Filter', undefined],
@@ -163,6 +164,26 @@ describe('the ventilator in HomeKit', () => {
     expect(refused.writes).toEqual([]);
   });
 
+  it('turns ECO mode on and off, as 1.0.6 did', async () => {
+    const unit = ventilator();
+    await unit.accessory.poll();
+    const eco = unit.service('Ventilation Eco Mode');
+    expect(value(eco, C.On)).toBe(false);
+    await set(eco, C.On, true);
+    expect(unit.writes).toEqual([{ 2504: 1 }]);
+    expect(value(eco, C.On)).toBe(true);
+  });
+
+  it('heats while the house is below the setpoint, and takes Heat or Cool from a scene', async () => {
+    const unit = ventilator({ ...UNIT_REPLY, '12543': 205 });
+    await unit.accessory.poll();
+    const thermostat = unit.service('Ventilation Thermostat');
+    expect(value(thermostat, C.CurrentHeatingCoolingState)).toBe(C.CurrentHeatingCoolingState.HEAT);
+    // Already running: Heat changes nothing on the unit.
+    await set(thermostat, C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.HEAT);
+    expect(unit.writes).toEqual([]);
+  });
+
   it('sets the temperature in the unit’s range', async () => {
     const unit = ventilator();
     await unit.accessory.poll();
@@ -193,6 +214,7 @@ describe('the ventilator in HomeKit', () => {
       modeNames: { crowded: 'Guests' },
       outdoorTemperature: false,
       filter: false,
+      eco: false,
     });
     const names = unit.accessory.getServices().map((service) => service.displayName);
     expect(names).toContain('Ventilation Guests');
@@ -201,6 +223,7 @@ describe('the ventilator in HomeKit', () => {
     expect(names.some((name) => name.endsWith('timer'))).toBe(false);
     expect(names).not.toContain('Ventilation Outdoor');
     expect(names).not.toContain('Ventilation Filter');
+    expect(names).not.toContain('Ventilation Eco Mode');
     expect(unit.accessory.getServices().some((service) => service.UUID === S.Valve.UUID)).toBe(false);
   });
 });

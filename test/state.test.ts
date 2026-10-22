@@ -3,6 +3,7 @@ import { durationSeconds, durationValue, MODES, modeById, SETTABLE_MODES } from 
 import {
   AUTO_WRITE,
   durationWrite,
+  ecoWrite,
   filterLifePercent,
   isMissingRegister,
   isStopped,
@@ -100,6 +101,11 @@ describe('telling the unit what to do', () => {
     expect(durationWrite(modeById('refresh'), 45)).toEqual({ 1103: 45 });
     expect(durationWrite(modeById('fireplace'), 90)).toEqual({ 1102: 60 });
     expect(() => durationWrite(modeById('auto'), 5)).toThrow(/has no duration/);
+  });
+
+  it('turns ECO mode on and off', () => {
+    expect(ecoWrite(true)).toEqual({ 2504: 1 });
+    expect(ecoWrite(false)).toEqual({ 2504: 0 });
   });
 
   it('sets the temperature in tenths, within 12–30 °C', () => {

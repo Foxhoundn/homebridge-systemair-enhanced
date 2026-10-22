@@ -144,6 +144,11 @@ export function durationWrite(mode: IMode, value: number): TRegisterWrite {
   return { [mode.duration.register]: clamped };
 }
 
+/** ECO mode on or off. */
+export function ecoWrite(on: boolean): TRegisterWrite {
+  return { [REGISTER.eco]: on ? 1 : 0 };
+}
+
 /** The setpoint, in tenths of a degree, within the unit's range. */
 export function setpointWrite(celsius: number): TRegisterWrite {
   const clamped = Math.min(SETPOINT_RANGE.max, Math.max(SETPOINT_RANGE.min, celsius));

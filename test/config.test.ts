@@ -14,6 +14,7 @@ describe('the plugin’s settings', () => {
       modeSwitches: DEFAULT_MODE_SWITCHES,
       timers: DEFAULT_TIMERS,
       modeNames: { crowded: 'Visitors' },
+      eco: true,
       outdoorTemperature: true,
       filter: true,
     });

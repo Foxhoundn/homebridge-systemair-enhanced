@@ -16,6 +16,8 @@ export interface IVentilatorConfig {
   timers: readonly TModeId[];
   /** The modes' names on their tiles; Crowded is "Visitors" unless set otherwise. */
   modeNames: Partial<Record<TModeId, string>>;
+  /** The ECO mode switch (1.0.6 had it). */
+  eco: boolean;
   outdoorTemperature: boolean;
   filter: boolean;
 }
@@ -67,6 +69,7 @@ export function readConfig(raw: unknown): IVentilatorConfig {
         })
       ),
     },
+    eco: config.eco !== false,
     outdoorTemperature: config.outdoorTemperature !== false,
     filter: config.filter !== false,
   };
