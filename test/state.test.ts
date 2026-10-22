@@ -7,12 +7,14 @@ import {
   filterLifePercent,
   isMissingRegister,
   isStopped,
+  fanSpeed,
   levelForSpeed,
+  manualWrite,
   modeWrite,
   readState,
   setpointWrite,
-  speedWrite,
 } from '../src/state.js';
+import { fanLevel } from '../src/registers.js';
 import { POLLED, REFRESH_REPLY, UNIT_REPLY } from './fixtures.js';
 
 describe('reading the unit', () => {
@@ -29,6 +31,7 @@ describe('reading the unit', () => {
       manualStopAllowed: true,
       supplyFanPercent: 55,
       extractFanPercent: 37,
+      fanLevel: 'low',
       extractTemperature: 22.4,
       outdoorTemperature: 10.1,
       setpoint: 22,
@@ -46,7 +49,26 @@ describe('reading the unit', () => {
     const state = readState(REFRESH_REPLY);
     expect(state.mode).toBe('refresh');
     expect(state.remainingSeconds).toBe(1800);
-    expect(state.supplyFanPercent).toBe(100);
+    expect(state.fanLevel).toBe('maximum');
+  });
+
+  it('knows the level Auto picked from the fans’ outputs: the closest set level', () => {
+    const at = (supply: number, extract: number) =>
+      readState({ ...UNIT_REPLY, '14000': supply, '14001': extract }).fanLevel;
+    expect(at(55, 37)).toBe('low');
+    expect(at(82, 64)).toBe('normal');
+    expect(at(95, 80)).toBe('high');
+    expect(at(38, 28)).toBe('minimum');
+    // Ramping up between Low and Normal: closer to Normal.
+    expect(at(70, 50)).toBe('normal');
+    expect(at(0, 0)).toBe('off');
+  });
+
+  it('shows each level at 1.x’s speeds, and Maximum at the top', () => {
+    const speed = (supply: number, extract: number) =>
+      fanSpeed(readState({ ...UNIT_REPLY, '14000': supply, '14001': extract }));
+    expect([speed(55, 37), speed(82, 64), speed(95, 80), speed(100, 90)]).toEqual([16, 50, 83, 100]);
+    expect(fanSpeed(readState({ ...UNIT_REPLY, '1160': 1, '1130': 0 }))).toBe(0);
   });
 
   it('reads a temperature below zero', () => {
@@ -87,10 +109,27 @@ describe('telling the unit what to do', () => {
     expect(() => modeWrite(modeById('cookerHood'))).toThrow(/can't be switched on/);
   });
 
-  it('turns a fan speed into Manual at a level', () => {
-    expect([0, 1, 33, 34, 66, 67, 100].map(levelForSpeed)).toEqual([0, 2, 2, 3, 3, 4, 4]);
-    expect(speedWrite(50)).toEqual({ 1130: 3, 1161: 2 });
-    expect(speedWrite(0)).toEqual({ 1130: 0, 1161: 2 });
+  it('reads a fan speed as a level: 1.x’s 16, 50 and 83% as before, the top as Maximum', () => {
+    expect([0, 1, 16, 33, 34, 50, 66, 67, 83, 91, 92, 100].map((speed) => levelForSpeed(speed).id)).toEqual([
+      'off',
+      'low',
+      'low',
+      'low',
+      'normal',
+      'normal',
+      'normal',
+      'high',
+      'high',
+      'high',
+      'maximum',
+      'maximum',
+    ]);
+  });
+
+  it('runs Manual at Off, Low, Normal or High, and nothing it can’t', () => {
+    expect(manualWrite(fanLevel('normal'))).toEqual({ 1130: 3, 1161: 2 });
+    expect(manualWrite(fanLevel('off'))).toEqual({ 1130: 0, 1161: 2 });
+    expect(() => manualWrite(fanLevel('maximum'))).toThrow(/can't run at Maximum/);
   });
 
   it('keeps durations in whole units within the unit’s limits', () => {

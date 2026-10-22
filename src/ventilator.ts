@@ -17,20 +17,21 @@ import {
   type IModeDuration,
   type TModeId,
 } from './modes.js';
-import { SETPOINT_RANGE, type TManualLevel } from './registers.js';
+import { fanLevel, SETPOINT_RANGE } from './registers.js';
 import { SaveConnect } from './saveConnect.js';
 import {
   AUTO_WRITE,
   durationWrite,
   ecoWrite,
+  fanSpeed,
   filterLifePercent,
   isStopped,
   levelForSpeed,
+  manualWrite,
   modeWrite,
   POLL_REGISTERS,
   readState,
   setpointWrite,
-  speedWrite,
   type IVentilatorState,
   type TRegisterValues,
   type TRegisterWrite,
@@ -51,13 +52,6 @@ export interface IVentilatorOptions {
 type TCharacteristic = WithUUID<new () => Characteristic>;
 /** A characteristic's value, worked out from the state (undefined: nothing to show yet). */
 type TReader = (state: IVentilatorState) => CharacteristicValue;
-
-const LEVEL_WORDS: Readonly<Record<TManualLevel, string>> = {
-  0: 'Off',
-  2: 'Low',
-  3: 'Normal',
-  4: 'High',
-};
 
 /** After this many failed reads in a row, the tiles say "No Response" rather than old values. */
 const STALE_AFTER_FAILURES = 3;
@@ -116,7 +110,7 @@ export class SystemairVentilator implements AccessoryPlugin {
       const state = readState(await this.client.read(POLL_REGISTERS));
       if (!this.state || this.failures)
         this.log.info(
-          `Reading the unit at ${this.config.ip}: ${this.modeName(state.mode)}, supply fan at ${state.supplyFanPercent}%`
+          `Reading the unit at ${this.config.ip}: ${this.modeName(state.mode)}, fans at ${fanLevel(state.fanLevel).name}`
         );
       this.failures = 0;
       this.state = state;
@@ -237,10 +231,9 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.show(fan, C.Active, (state) =>
       isStopped(state) ? C.Active.INACTIVE : C.Active.ACTIVE
     );
-    // What the supply fan actually runs at: Refresh at Maximum shows near 100%, not Low's 16%.
-    this.show(fan, C.RotationSpeed, (state) =>
-      isStopped(state) ? 0 : clamp(state.supplyFanPercent, 0, 100)
-    );
+    // The level the fans really run at, in 1.x's terms (Low 16%, Normal 50%, High 83%), and
+    // Maximum 100%: Refresh shows 100%, not the manual setting's 16%.
+    this.show(fan, C.RotationSpeed, fanSpeed);
     this.show(fan, C.TargetFanState, (state) =>
       state.mode === 'auto' ? C.TargetFanState.AUTO : C.TargetFanState.MANUAL
     );
@@ -274,23 +267,35 @@ export class SystemairVentilator implements AccessoryPlugin {
       );
       throw new this.hap.HapStatusError(this.hap.HAPStatus.NOT_ALLOWED_IN_CURRENT_STATE);
     }
-    await this.send(speedWrite(0), 'Fans stopped');
-    this.assume({ mode: 'manual', manualLevel: 0 });
+    await this.send(manualWrite(fanLevel('off')), 'Fans stopped');
+    this.assume({ mode: 'manual', manualLevel: 0, fanLevel: 'off' });
   }
 
-  /** A fan speed from the Home app: Manual at Low, Normal or High, once the slider settles. */
+  /**
+   * A fan speed from the Home app, once the slider settles: Manual at Low, Normal or High, or at
+   * the top Refresh, the only way to Maximum (for its set time, then back to Auto).
+   */
   private setSpeed(percent: number): void {
     if (this.speed) clearTimeout(this.speed.timer);
     const timer = setTimeout(() => {
       this.speed = undefined;
       const state = this.state;
-      if (percent <= 0) {
-        if (state && !isStopped(state)) void this.stopFans(state).catch(() => undefined);
+      if (!state) return;
+      const level = levelForSpeed(percent);
+      if (level.id === 'off') {
+        if (!isStopped(state)) void this.stopFans(state).catch(() => undefined);
         return;
       }
-      const level = levelForSpeed(percent);
-      void this.send(speedWrite(percent), `Manual at ${LEVEL_WORDS[level]} (${percent}% in HomeKit)`)
-        .then(() => this.assume({ mode: 'manual', manualLevel: level }))
+      if (!level.manual) {
+        if (state.mode === 'refresh') return;
+        const refresh = modeById('refresh');
+        void this.send(modeWrite(refresh), `Refresh (Maximum) for ${this.durationWords(refresh, state)}`)
+          .then(() => this.assume({ mode: 'refresh', fanLevel: 'maximum' }))
+          .catch(() => undefined);
+        return;
+      }
+      void this.send(manualWrite(level), `Manual at ${level.name} (${percent}% in HomeKit)`)
+        .then(() => this.assume({ mode: 'manual', manualLevel: level.value, fanLevel: level.id }))
         .catch(() => undefined);
     }, SPEED_SETTLE_MS);
     this.speed = { percent, timer };

@@ -1,5 +1,12 @@
 import { MODES, modeByCurrent, type IMode, type TModeId } from './modes.js';
-import { MANUAL_LEVEL, REGISTER, SETPOINT_RANGE, type TManualLevel } from './registers.js';
+import {
+  FAN_LEVELS,
+  fanLevel,
+  REGISTER,
+  SETPOINT_RANGE,
+  type IFanLevel,
+  type TFanLevel,
+} from './registers.js';
 
 /** Register values as the unit returns them: `{"1160": 3, …}`. */
 export type TRegisterValues = Readonly<Record<string, number>>;
@@ -13,6 +20,7 @@ export const POLL_REGISTERS: Readonly<Record<number, number>> = {
   [REGISTER.remaining]: 2,
   [REGISTER.manualStopAllowed]: 1,
   [REGISTER.supplyFanOutput]: 2,
+  [REGISTER.fanLevelPercents]: 10,
   [REGISTER.extractTemperature]: 1,
   [REGISTER.outdoorTemperature]: 1,
   [REGISTER.setpoint]: 1,
@@ -35,6 +43,8 @@ export interface IVentilatorState {
   /** What the fans run at now, percent. */
   supplyFanPercent: number;
   extractFanPercent: number;
+  /** The airflow level that is: the one whose set percentages are closest. */
+  fanLevel: TFanLevel;
   /** °C */
   extractTemperature: number;
   outdoorTemperature: number;
@@ -64,15 +74,35 @@ const long = (values: TRegisterValues, register: number): number =>
   value(values, register + 1) * 65_536 + value(values, register);
 const tenths = (raw: number): number => signed(raw) / 10;
 
+/**
+ * The level the fans run at, from their outputs and each level's set percentages: Auto picks its
+ * level itself, and no register says which it picked.
+ */
+export function levelOf(values: TRegisterValues, supply: number, extract: number): TFanLevel {
+  if (supply <= 0 && extract <= 0) return 'off';
+  let best: { id: TFanLevel; distance: number } = { id: 'off', distance: Infinity };
+  for (const level of FAN_LEVELS) {
+    if (level.supplyRegister === undefined) continue;
+    const distance =
+      Math.abs(value(values, level.supplyRegister) - supply) +
+      Math.abs(value(values, level.supplyRegister + 1) - extract);
+    if (distance < best.distance) best = { id: level.id, distance };
+  }
+  return best.id;
+}
+
 /** What the unit is doing, from one read of `POLL_REGISTERS`. */
 export function readState(values: TRegisterValues): IVentilatorState {
+  const supply = value(values, REGISTER.supplyFanOutput);
+  const extract = value(values, REGISTER.extractFanOutput);
   return {
     mode: modeByCurrent(value(values, REGISTER.modeCurrent))?.id,
     remainingSeconds: long(values, REGISTER.remaining),
     manualLevel: value(values, REGISTER.manualLevel),
     manualStopAllowed: value(values, REGISTER.manualStopAllowed) === 1,
-    supplyFanPercent: value(values, REGISTER.supplyFanOutput),
-    extractFanPercent: value(values, REGISTER.extractFanOutput),
+    supplyFanPercent: supply,
+    extractFanPercent: extract,
+    fanLevel: levelOf(values, supply, extract),
     extractTemperature: tenths(value(values, REGISTER.extractTemperature)),
     outdoorTemperature: tenths(value(values, REGISTER.outdoorTemperature)),
     setpoint: tenths(value(values, REGISTER.setpoint)),
@@ -94,7 +124,7 @@ export function isMissingRegister(error: unknown): boolean {
 
 /** The fans are stopped: Manual mode at Off. */
 export function isStopped(state: IVentilatorState): boolean {
-  return state.mode === 'manual' && state.manualLevel === MANUAL_LEVEL.off;
+  return state.mode === 'manual' && state.manualLevel === fanLevel('off').value;
 }
 
 /** How much filter life is left, percent of its change period. */
@@ -104,12 +134,21 @@ export function filterLifePercent(state: IVentilatorState): number {
   return Math.round(Math.min(100, Math.max(0, (state.filterRemainingSeconds / period) * 100)));
 }
 
-/** The manual level a HomeKit fan speed stands for: up to a third Low, two thirds Normal, then High. */
-export function levelForSpeed(percent: number): TManualLevel {
-  if (percent <= 0) return MANUAL_LEVEL.off;
-  if (percent <= 33) return MANUAL_LEVEL.low;
-  if (percent <= 66) return MANUAL_LEVEL.normal;
-  return MANUAL_LEVEL.high;
+/** The speed HomeKit shows: the level's (Low 16%, Normal 50%, High 83%, Maximum 100%). */
+export function fanSpeed(state: IVentilatorState): number {
+  return isStopped(state) ? 0 : fanLevel(state.fanLevel).speed;
+}
+
+/**
+ * The level a HomeKit fan speed asks for: halfway between two levels' speeds is the line, so a
+ * scene's 16, 50 or 83% is Low, Normal or High as in 1.x, and the top of the slider is Maximum.
+ */
+export function levelForSpeed(percent: number): IFanLevel {
+  if (percent <= 0) return fanLevel('off');
+  if (percent <= 33) return fanLevel('low');
+  if (percent <= 66) return fanLevel('normal');
+  if (percent <= 91) return fanLevel('high');
+  return fanLevel('maximum');
 }
 
 /** Back to Auto: the unit's own schedule and demand control. */
@@ -121,10 +160,11 @@ function modeRequest(id: TModeId): number {
   return request;
 }
 
-/** Manual mode at the level a fan speed stands for (0 stops the fans). */
-export function speedWrite(percent: number): TRegisterWrite {
+/** Manual mode at a level it can run at (Off stops the fans). */
+export function manualWrite(level: IFanLevel): TRegisterWrite {
+  if (!level.manual) throw new Error(`Manual mode can't run at ${level.name}`);
   return {
-    [REGISTER.manualLevel]: levelForSpeed(percent),
+    [REGISTER.manualLevel]: level.value,
     [REGISTER.modeRequest]: modeRequest('manual'),
   };
 }

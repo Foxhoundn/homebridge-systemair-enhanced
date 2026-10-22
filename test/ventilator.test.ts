@@ -76,7 +76,8 @@ describe('the ventilator in HomeKit', () => {
     await unit.accessory.poll();
     const fan = unit.service('Ventilation Fan');
     expect(value(fan, C.Active)).toBe(C.Active.ACTIVE);
-    expect(value(fan, C.RotationSpeed)).toBe(55);
+    // Auto runs the fans at Low: 1.x's 16%.
+    expect(value(fan, C.RotationSpeed)).toBe(16);
     expect(value(fan, C.TargetFanState)).toBe(C.TargetFanState.AUTO);
     expect(value(unit.service('Ventilation Auto'), C.On)).toBe(true);
     expect(value(unit.service('Ventilation Refresh'), C.On)).toBe(false);
@@ -89,7 +90,7 @@ describe('the ventilator in HomeKit', () => {
     expect(value(unit.service('Ventilation Refresh timer'), C.SetDuration)).toBe(35 * 60);
   });
 
-  it('shows Refresh as running, at the fans’ real speed (not Low’s 16%), counting down', async () => {
+  it('shows Refresh as running, at Maximum (not the manual setting’s 16%), counting down', async () => {
     const unit = ventilator(REFRESH_REPLY);
     await unit.accessory.poll();
     expect(value(unit.service('Ventilation Fan'), C.RotationSpeed)).toBe(100);
@@ -148,6 +149,23 @@ describe('the ventilator in HomeKit', () => {
     expect(unit.writes).toEqual([]);
     await vi.advanceTimersByTimeAsync(400);
     expect(unit.writes).toEqual([{ 1130: 3, 1161: 2 }]);
+    expect(value(fan, C.RotationSpeed)).toBe(50);
+  });
+
+  it('starts Refresh at the top of the slider, the only way to Maximum', async () => {
+    vi.useFakeTimers();
+    const unit = ventilator();
+    await unit.accessory.poll();
+    const fan = unit.service('Ventilation Fan');
+    await set(fan, C.RotationSpeed, 100);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(unit.writes).toEqual([{ 1161: 4 }]);
+    expect(value(fan, C.RotationSpeed)).toBe(100);
+    expect(value(unit.service('Ventilation Refresh'), C.On)).toBe(true);
+    // Just below it is High.
+    await set(fan, C.RotationSpeed, 85);
+    await vi.advanceTimersByTimeAsync(400);
+    expect(unit.writes.at(-1)).toEqual({ 1130: 4, 1161: 2 });
   });
 
   it('stops the fans only where the unit allows it', async () => {
@@ -196,11 +214,11 @@ describe('the ventilator in HomeKit', () => {
     const speed = unit.service('Ventilation Fan').getCharacteristic(C.RotationSpeed);
     await expect(speed.handleGetRequest()).rejects.toBe(hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     await unit.accessory.poll();
-    await expect(speed.handleGetRequest()).resolves.toBe(55);
+    await expect(speed.handleGetRequest()).resolves.toBe(16);
     vi.mocked(unit.client.read).mockRejectedValue(new Error('timeout'));
     await unit.accessory.poll();
     // One missed read keeps the last values…
-    await expect(speed.handleGetRequest()).resolves.toBe(55);
+    await expect(speed.handleGetRequest()).resolves.toBe(16);
     await unit.accessory.poll();
     await unit.accessory.poll();
     // …three in a row don't.
