@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1
+
+### Changed
+
+- **The thermostat offers Off and Auto only.** The unit has no heating or cooling modes, only its setpoint, so Heat and Cool did the same as Auto. Off stops the fans; Auto runs them.
+
 ## 2.1.0
 
 ### Changed

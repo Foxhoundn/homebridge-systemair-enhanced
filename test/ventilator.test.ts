@@ -236,14 +236,20 @@ describe('the ventilator in HomeKit', () => {
     expect(value(eco, C.On)).toBe(true);
   });
 
-  it('heats while the house is below the setpoint, and takes Heat or Cool from a scene', async () => {
+  it('offers Off and Auto only, and says it heats while the house is below the setpoint', async () => {
     const unit = ventilator({ ...UNIT_REPLY, '12543': 205 });
     await unit.accessory.poll();
     const thermostat = unit.service('Ventilation Thermostat');
     expect(value(thermostat, C.CurrentHeatingCoolingState)).toBe(C.CurrentHeatingCoolingState.HEAT);
-    // Already running: Heat changes nothing on the unit.
-    await set(thermostat, C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.HEAT);
-    expect(unit.writes).toEqual([]);
+    expect(thermostat.getCharacteristic(C.TargetHeatingCoolingState).props.validValues).toEqual([
+      C.TargetHeatingCoolingState.OFF,
+      C.TargetHeatingCoolingState.AUTO,
+    ]);
+    // Off stops the fans; Auto brings them back.
+    await set(thermostat, C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.OFF);
+    expect(unit.writes).toEqual([{ 1130: 0, 1161: 2 }]);
+    await set(thermostat, C.TargetHeatingCoolingState, C.TargetHeatingCoolingState.AUTO);
+    expect(unit.writes.at(-1)).toEqual({ 1161: 1 });
   });
 
   it('sets the temperature in the unit’s range', async () => {

@@ -441,8 +441,11 @@ export class SystemairVentilator implements AccessoryPlugin {
       await this.send(setpointWrite(celsius), `Temperature set to ${celsius} °C`);
       this.assume({ setpoint: celsius });
     });
-    // Off stops the fans; any other choice runs them (Heat and Cool stay choosable, as in 1.0.6,
-    // so scenes that pick them still work). It heats while the house is below the setpoint.
+    // Off stops the fans, Auto runs them: the unit has no heating or cooling modes, only the
+    // setpoint, which it reaches by itself. Heating or cooling says which side of it the house is.
+    thermostat.getCharacteristic(C.TargetHeatingCoolingState).setProps({
+      validValues: [C.TargetHeatingCoolingState.OFF, C.TargetHeatingCoolingState.AUTO],
+    });
     this.show(thermostat, C.TargetHeatingCoolingState, (state) =>
       isStopped(state) ? C.TargetHeatingCoolingState.OFF : C.TargetHeatingCoolingState.AUTO
     );

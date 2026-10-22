@@ -27,7 +27,7 @@ It talks to the unit's **SAVE Connect** module the same way the module's own web
 | **Fan** | Shows the level the fans really run at, Auto included. Drag it to run them manually at Low, Normal or High; drag it to the top to start Refresh; switch it back to Auto, or off. |
 | **Auto, Visitors, Away, Holiday** | A switch per mode, for scenes and automations. Only one mode is on at a time. Turning the one that's on off goes back to what it interrupted: Auto, or the manual level you had. |
 | **Refresh, Fireplace** | Timers (they look like a water tap in the Home app): set how long the mode lasts in the tile's settings (Duration), turn it on, and watch it count down. Off ends it early. |
-| **Thermostat** | The temperature in the house and the setpoint (12–30 °C). |
+| **Thermostat** | The temperature in the house and the setpoint (12–30 °C); Off stops the fans, Auto runs them. The unit has no heat or cool modes: it reaches the setpoint by itself. |
 | **Eco Mode** | The unit's ECO mode. |
 | **Humidity** | Relative humidity of the extract air. |
 | **Outdoor** | The unit's outdoor temperature sensor. |
