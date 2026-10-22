@@ -199,14 +199,6 @@ export class SystemairVentilator implements AccessoryPlugin {
     this.show(humidity, C.CurrentRelativeHumidity, (state) => clamp(state.humidity, 0, 100));
     this.services.push(humidity);
 
-    // The time left in a timed mode as a battery level, as before (minutes, up to 100).
-    const timer = new S.Battery(`${name} Timer`);
-    this.show(timer, C.BatteryLevel, (state) =>
-      clamp(Math.ceil(state.remainingSeconds / 60), 0, 100)
-    );
-    this.show(timer, C.StatusLowBattery, () => C.StatusLowBattery.BATTERY_LEVEL_NORMAL);
-    this.services.push(timer);
-
     if (this.config.outdoorTemperature) {
       const outdoor = new S.TemperatureSensor(`${name} Outdoor`, 'outdoor');
       outdoor.getCharacteristic(C.CurrentTemperature).setProps({ minValue: -50, maxValue: 60 });

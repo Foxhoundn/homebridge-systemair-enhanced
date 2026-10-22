@@ -55,7 +55,7 @@ describe('the ventilator in HomeKit', () => {
       ['', undefined],
       ['Ventilation Fan', undefined],
       ['Ventilation Auto', 'mode-auto'],
-      ['Ventilation Crowded', 'mode-crowded'],
+      ['Ventilation Visitors', 'mode-crowded'],
       // The Refresh switch keeps no subtype, so scenes and automations using it keep working.
       ['Ventilation Refresh', undefined],
       ['Ventilation Fireplace', 'mode-fireplace'],
@@ -65,7 +65,6 @@ describe('the ventilator in HomeKit', () => {
       ['Ventilation Fireplace timer', 'timer-fireplace'],
       ['Ventilation Thermostat', undefined],
       ['Ventilation Humidity', undefined],
-      ['Ventilation Timer', undefined],
       ['Ventilation Outdoor', 'outdoor'],
       ['Ventilation Filter', undefined],
     ]);
@@ -99,7 +98,6 @@ describe('the ventilator in HomeKit', () => {
     expect(value(timer, C.Active)).toBe(C.Active.ACTIVE);
     expect(value(timer, C.InUse)).toBe(C.InUse.IN_USE);
     expect(value(timer, C.RemainingDuration)).toBe(1800);
-    expect(value(unit.service('Ventilation Timer'), C.BatteryLevel)).toBe(30);
   });
 
   it('starts Refresh from its switch and changes nothing else', async () => {
@@ -192,12 +190,12 @@ describe('the ventilator in HomeKit', () => {
     const unit = ventilator(UNIT_REPLY, {
       modeSwitches: ['refresh', 'crowded'],
       timers: [],
-      modeNames: { crowded: 'Visitors' },
+      modeNames: { crowded: 'Guests' },
       outdoorTemperature: false,
       filter: false,
     });
     const names = unit.accessory.getServices().map((service) => service.displayName);
-    expect(names).toContain('Ventilation Visitors');
+    expect(names).toContain('Ventilation Guests');
     expect(names).toContain('Ventilation Refresh');
     expect(names).not.toContain('Ventilation Auto');
     expect(names.some((name) => name.endsWith('timer'))).toBe(false);

@@ -35,7 +35,7 @@
         "items": {
           "type": "string",
           "enum": ["auto", "crowded", "refresh", "fireplace", "away", "holiday"],
-          "enumNames": ["Auto", "Crowded", "Refresh", "Fireplace", "Away", "Holiday"]
+          "enumNames": ["Auto", "Visitors (Crowded)", "Refresh", "Fireplace", "Away", "Holiday"]
         }
       },
       "timers": {
@@ -55,7 +55,7 @@
         "type": "object",
         "properties": {
           "auto": { "title": "Auto", "type": "string", "placeholder": "Auto" },
-          "crowded": { "title": "Crowded", "type": "string", "placeholder": "Crowded (for example, Visitors)" },
+          "crowded": { "title": "Crowded", "type": "string", "placeholder": "Visitors" },
           "refresh": { "title": "Refresh", "type": "string", "placeholder": "Refresh" },
           "fireplace": { "title": "Fireplace", "type": "string", "placeholder": "Fireplace" },
           "away": { "title": "Away", "type": "string", "placeholder": "Away" },

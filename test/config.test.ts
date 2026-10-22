@@ -13,7 +13,7 @@ describe('the plugin’s settings', () => {
       pollSeconds: 10,
       modeSwitches: DEFAULT_MODE_SWITCHES,
       timers: DEFAULT_TIMERS,
-      modeNames: {},
+      modeNames: { crowded: 'Visitors' },
       outdoorTemperature: true,
       filter: true,
     });
@@ -25,13 +25,13 @@ describe('the plugin’s settings', () => {
       pollSeconds: 1,
       modeSwitches: ['refresh', 'cookerHood', 'manual', 'nonsense'],
       timers: ['away', 'fireplace'],
-      modeNames: { crowded: ' Visitors ', refresh: '' },
+      modeNames: { crowded: ' Guests ', refresh: '' },
     });
     expect(config.pollSeconds).toBe(10);
     // Cooker hood is started by a wired switch; Manual is the fan's speed.
     expect(config.modeSwitches).toEqual(['refresh']);
     // Away lasts hours: more than a HomeKit timer counts down.
     expect(config.timers).toEqual(['fireplace']);
-    expect(config.modeNames).toEqual({ crowded: 'Visitors' });
+    expect(config.modeNames).toEqual({ crowded: 'Guests' });
   });
 });

@@ -14,7 +14,7 @@ export interface IVentilatorConfig {
    * lasts, and the valve counts down while it runs. Up to an hour (HomeKit's limit).
    */
   timers: readonly TModeId[];
-  /** Other names for the modes' tiles: { crowded: "Visitors" }. */
+  /** The modes' names on their tiles; Crowded is "Visitors" unless set otherwise. */
   modeNames: Partial<Record<TModeId, string>>;
   outdoorTemperature: boolean;
   filter: boolean;
@@ -29,6 +29,8 @@ export const DEFAULT_MODE_SWITCHES: readonly TModeId[] = [
   'holiday',
 ];
 export const DEFAULT_TIMERS: readonly TModeId[] = ['refresh', 'fireplace'];
+/** What people call the unit's Crowded mode. */
+export const DEFAULT_MODE_NAMES: Readonly<Partial<Record<TModeId, string>>> = { crowded: 'Visitors' };
 /** The Home app counts a valve's duration down from at most an hour. */
 export const TIMER_MAX_SECONDS = 3600;
 const MIN_POLL_SECONDS = 5;
@@ -56,12 +58,15 @@ export function readConfig(raw: unknown): IVentilatorConfig {
     pollSeconds: Number.isFinite(poll) && poll >= MIN_POLL_SECONDS ? poll : 10,
     modeSwitches: modeList(config.modeSwitches, settable, DEFAULT_MODE_SWITCHES),
     timers: modeList(config.timers, timed, DEFAULT_TIMERS),
-    modeNames: Object.fromEntries(
-      MODES.flatMap((mode) => {
-        const name = names[mode.id];
-        return typeof name === 'string' && name.trim() ? [[mode.id, name.trim()]] : [];
-      })
-    ),
+    modeNames: {
+      ...DEFAULT_MODE_NAMES,
+      ...Object.fromEntries(
+        MODES.flatMap((mode) => {
+          const name = names[mode.id];
+          return typeof name === 'string' && name.trim() ? [[mode.id, name.trim()]] : [];
+        })
+      ),
+    },
     outdoorTemperature: config.outdoorTemperature !== false,
     filter: config.filter !== false,
   };
